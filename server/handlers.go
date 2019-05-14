@@ -225,7 +225,7 @@ func (s *Server) handleAuthorization(w http.ResponseWriter, r *http.Request) {
 
 	connectors, e := s.storage.ListConnectors()
 	if e != nil {
-		s.logger.Errorf("Failed to get list of connectors: %v", e)
+		s.logger.Errorf("Failed to get list of connectors: %v", err)
 		s.renderError(w, http.StatusInternalServerError, "Failed to retrieve connector list.")
 		return
 	}
@@ -442,7 +442,17 @@ func (s *Server) handleConnectorCallback(w http.ResponseWriter, r *http.Request)
 
 	if err != nil {
 		s.logger.Errorf("Failed to authenticate: %v", err)
-		s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to authenticate: %v", err))
+
+		if strings.HasPrefix(err.Error(), "Hi there ") {
+			err = s.templates.errEscape(w, http.StatusForbidden, err.Error())
+			if err != nil {
+				s.logger.Errorf("Server template error: %v", err)
+			}
+
+		} else {
+			s.renderError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to authenticate: %v", err))
+		}
+
 		return
 	}
 

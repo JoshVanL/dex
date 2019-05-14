@@ -49,6 +49,8 @@ type Config struct {
 	TeamNameField string `json:"teamNameField"`
 	LoadAllGroups bool   `json:"loadAllGroups"`
 	UseLoginAsID  bool   `json:"useLoginAsID"`
+
+	StarredRepo string `json:"starredRepo"`
 }
 
 // Org holds org-team filters, in which teams are optional.
@@ -75,6 +77,8 @@ func (c *Config) Open(id string, logger log.Logger) (connector.Connector, error)
 		logger.Warn("github: legacy field 'org' being used. Switch to the newer 'orgs' field structure")
 	}
 
+	logger.Infof("Starred repo: [%s]", c.StarredRepo)
+
 	g := githubConnector{
 		redirectURI:  c.RedirectURI,
 		org:          c.Org,
@@ -84,6 +88,7 @@ func (c *Config) Open(id string, logger log.Logger) (connector.Connector, error)
 		apiURL:       apiURL,
 		logger:       logger,
 		useLoginAsID: c.UseLoginAsID,
+		starredRepo:  c.StarredRepo,
 	}
 
 	if c.HostName != "" {
@@ -151,6 +156,8 @@ type githubConnector struct {
 	loadAllGroups bool
 	// if set to true will use the users handle rather than their numeric id as the ID
 	useLoginAsID bool
+
+	starredRepo string
 }
 
 // groupsRequired returns whether dex requires GitHub's 'read:org' scope. Dex
@@ -292,7 +299,53 @@ func (c *githubConnector) HandleCallback(s connector.Scopes, r *http.Request) (i
 		identity.ConnectorData = connData
 	}
 
+	if len(c.starredRepo) > 0 {
+		starred, err := c.verifyIdentityHasStarred(ctx, client, user)
+		if err != nil {
+			return identity, fmt.Errorf("failed to verify identity has starred repository (%s): %s",
+				c.starredRepo, err)
+		}
+
+		if !starred {
+			err = fmt.Errorf(`Hi there %s!<br><br>It looks like you haven't given the repository a star yet!<br>Star the repository and try again ;)<br><br>
+<a href="https://github.com/jetstack/kube-oidc-proxy">github.com/jetstack/kube-oidc-proxy</a>`, user.Login)
+			return identity, err
+		}
+	}
+
 	return identity, nil
+}
+
+type starred struct {
+	FullName string `json:"full_name"`
+}
+
+func (c *githubConnector) verifyIdentityHasStarred(ctx context.Context, client *http.Client, u user) (bool, error) {
+	apiURL := fmt.Sprintf("%s/users/%s/starred", c.apiURL, u.Login)
+
+	for {
+
+		var (
+			ss  []starred
+			err error
+		)
+
+		if apiURL, err = get(ctx, client, apiURL, &ss); err != nil {
+			return false, fmt.Errorf("github: get starred (%s): %v\n", u.Login, err)
+		}
+
+		for _, s := range ss {
+			if s.FullName == c.starredRepo {
+				return true, nil
+			}
+		}
+
+		if apiURL == "" {
+			break
+		}
+	}
+
+	return false, nil
 }
 
 func (c *githubConnector) Refresh(ctx context.Context, s connector.Scopes, identity connector.Identity) (connector.Identity, error) {

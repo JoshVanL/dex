@@ -238,6 +238,18 @@ func (t *templates) err(w http.ResponseWriter, errCode int, errMsg string) error
 	return nil
 }
 
+func (t *templates) errEscape(w http.ResponseWriter, errCode int, errMsg string) error {
+	w.WriteHeader(errCode)
+	data := struct {
+		ErrType string
+		ErrMsg  template.HTML
+	}{http.StatusText(errCode), template.HTML(errMsg)}
+	if err := t.errorTmpl.Execute(w, data); err != nil {
+		return fmt.Errorf("Error rendering template %s: %s", t.errorTmpl.Name(), err)
+	}
+	return nil
+}
+
 // small io.Writer utility to determine if executing the template wrote to the underlying response writer.
 type writeRecorder struct {
 	wrote bool
