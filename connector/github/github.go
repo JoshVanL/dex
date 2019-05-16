@@ -50,7 +50,8 @@ type Config struct {
 	LoadAllGroups bool   `json:"loadAllGroups"`
 	UseLoginAsID  bool   `json:"useLoginAsID"`
 
-	StarredRepo string `json:"starredRepo"`
+	StarredRepo      string   `json:"starredRepo"`
+	ExtraGroupClaims []string `json:"extraGroupClaims"`
 }
 
 // Org holds org-team filters, in which teams are optional.
@@ -80,15 +81,16 @@ func (c *Config) Open(id string, logger log.Logger) (connector.Connector, error)
 	logger.Infof("Starred repo: [%s]", c.StarredRepo)
 
 	g := githubConnector{
-		redirectURI:  c.RedirectURI,
-		org:          c.Org,
-		orgs:         c.Orgs,
-		clientID:     c.ClientID,
-		clientSecret: c.ClientSecret,
-		apiURL:       apiURL,
-		logger:       logger,
-		useLoginAsID: c.UseLoginAsID,
-		starredRepo:  c.StarredRepo,
+		redirectURI:      c.RedirectURI,
+		org:              c.Org,
+		orgs:             c.Orgs,
+		clientID:         c.ClientID,
+		clientSecret:     c.ClientSecret,
+		apiURL:           apiURL,
+		logger:           logger,
+		useLoginAsID:     c.UseLoginAsID,
+		starredRepo:      c.StarredRepo,
+		extraGroupClaims: c.ExtraGroupClaims,
 	}
 
 	if c.HostName != "" {
@@ -158,6 +160,8 @@ type githubConnector struct {
 	useLoginAsID bool
 
 	starredRepo string
+
+	extraGroupClaims []string
 }
 
 // groupsRequired returns whether dex requires GitHub's 'read:org' scope. Dex
@@ -312,6 +316,8 @@ func (c *githubConnector) HandleCallback(s connector.Scopes, r *http.Request) (i
 			return identity, err
 		}
 	}
+
+	identity.Groups = append(identity.Groups, c.extraGroupClaims...)
 
 	return identity, nil
 }
